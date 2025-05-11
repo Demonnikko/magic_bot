@@ -1,0 +1,139 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Illusion Calendar</title>
+
+<!-- FullCalendar -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
+
+<style>
+:root{--bg:#0A0A0A;--fg:#FFF;--ac:#C37DFF;--br:#2E2E2E;--panel:#131313}
+*{box-sizing:border-box;font-family:-apple-system,'SF Pro Display',sans-serif}
+body{margin:0;background:var(--bg);color:var(--fg)}
+#top{height:44px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--br)}
+#ttl{font-size:17px;font-weight:600;letter-spacing:-.3px}
+#cal{max-width:900px;margin:0 auto;padding:2px}
+.fc{--fc-border-color:var(--br)}.fc-header-toolbar{display:none}
+.fc-daygrid-day-frame{padding:4px}.fc-day-today{background:#222!important}
+.fc-event{background:var(--ac);border:0;border-radius:4px;font-size:11px;padding:2px 4px}
+.fc-multimonth{--fc-multimonth-title-height:28px;--fc-multimonth-hgap:12px;--fc-multimonth-vgap:12px}
+.fc-multimonth-title{font-size:22px;text-align:left;padding-left:4px;color:var(--ac)}
+
+#modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#0008;z-index:99}
+.sheet{width:92%;max-width:520px;background:var(--panel);border-radius:14px;padding:18px;box-shadow:0 4px 16px #000a}
+.sheet h2{font-size:18px;margin:0 0 6px;font-weight:600}
+fieldset{border:1px solid var(--br);border-radius:10px;padding:12px;margin-top:12px}
+legend{padding:0 6px;font-size:12px;color:#888}
+label{display:block;font-size:12px;margin-top:10px}
+input,select,textarea{width:100%;border:1px solid var(--br);border-radius:8px;background:#1A1A1A;color:var(--fg);padding:6px;font-size:14px}
+input[type=time],input[type=number]{color-scheme:dark}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.checklist li{display:flex;gap:6px;margin-top:6px}
+.checklist input{width:16px;height:16px;margin:0}
+.checklist span{flex:1;font-size:13px}
+.btn{display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;padding:10px;font-size:15px;margin-top:16px;width:100%}
+.save{background:var(--ac);color:#000;font-weight:600}
+.cls{background:#333;color:#BBB}
+</style>
+</head><body>
+<div id="top"><div id="ttl"></div></div>
+<div id="cal"></div>
+
+<!-- форма события-->
+<div id="modal"><div class="sheet">
+  <h2 id="dH"></h2>
+
+  <fieldset><legend>Данные</legend>
+    <label>Название <input id="tTitle" placeholder="Шоу-программа"></label>
+    <label>Адрес <input id="tAddr" placeholder="Суздаль, ул…"><small id="route" style="font-size:11px;color:#888"></small></label>
+    <div class="row"><div><label>Начало <input id="tStart" type="time" step="300"></label></div>
+         <div><label>Конец <input id="tEnd" type="time" step="300"></label></div></div>
+    <label><input type="checkbox" id="tAll"> Весь день</label>
+    <div class="row"><div><label>Предопл. ₽ <input id="tPre" type="number" value="0"></label></div>
+         <div><label>Гонорар ₽ <input id="tFee" type="number" value="15000"></label></div></div>
+  </fieldset>
+
+  <fieldset><legend>Категория</legend>
+    <select id="tCat">
+      <option value="concert">Концерт</option>
+      <option value="micro">Микромагия</option>
+      <option value="private">Частное</option>
+      <option value="wedding">Свадьба</option>
+    </select>
+  </fieldset>
+
+  <fieldset><legend>Чек-лист</legend>
+    <ul id="tList" class="checklist"><li><input type="checkbox"><span>Привезти реквизит</span></li></ul>
+    <button class="btn cls" id="addItem">+ пункт</button>
+  </fieldset>
+
+  <button class="btn save" id="save">Сохранить</button>
+  <button class="btn cls" id="cancel">Отмена</button>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/multimonth@6.1.9/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://api-maps.yandex.ru/v3/?apikey=YOUR_API_KEY&lang=ru_RU"></script>
+
+<script>
+const $=i=>document.getElementById(i);
+const modal=$('modal');let v='month';
+
+/* Calendar */
+const cal=new FullCalendar.Calendar($('cal'),{
+  plugins:[FullCalendar.MultiMonthPlugin],
+  initialView:'dayGridMonth',locale:'ru',firstDay:1,height:'auto',
+  datesSet:i=>{$('ttl').textContent=i.view.title},
+  dateClick:i=>open(i.dateStr)
+});cal.render();
+
+/* pinch */
+const hm=new Hammer.Manager($('cal'));hm.add(new Hammer.Pinch({enable:true}));
+hm.on('pinchin',()=>{if(v==='month'){cal.changeView('multiMonthYear');v='year';}});
+hm.on('pinchout',()=>{if(v==='year'){cal.changeView('dayGridMonth');v='month';}});
+
+/* vertical swipe */
+let y0=0;$('cal').addEventListener('touchstart',e=>{y0=e.touches[0].clientY});
+$('cal').addEventListener('touchend',e=>{
+  const d=y0-e.changedTouches[0].clientY;if(Math.abs(d)<80)return;
+  v==='month'?d>0?cal.next():cal.prev():cal.addDate({years:d>0?1:-1});
+});
+
+/* form */
+const f={tit:$('tTitle'),addr:$('tAddr'),s:$('tStart'),e:$('tEnd'),
+         all:$('tAll'),pre:$('tPre'),fee:$('tFee'),cat:$('tCat')};
+
+function open(d){
+  modal.dataset.d=d;
+  $('dH').textContent=new Date(d).toLocaleDateString('ru-RU',
+    {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  modal.style.display='flex';
+}
+modal.onclick=e=>{if(e.target===modal)modal.style.display='none'};
+$('cancel').onclick=()=>modal.style.display='none';
+f.all.onchange=()=>{f.s.disabled=f.e.disabled=f.all.checked};
+$('addItem').onclick=()=>{$('tList').insertAdjacentHTML('beforeend',
+  '<li><input type="checkbox"><span>Новая задача</span></li>');};
+
+$('save').onclick=()=>{
+  cal.addEvent({
+    title:f.tit.value||'Заказ',
+    start:modal.dataset.d+'T'+(f.s.value||'08:00'),
+    end:modal.dataset.d+'T'+(f.e.value||'09:00'),
+    allDay:f.all.checked,
+    extendedProps:{addr:f.addr.value,pre:+f.pre.value,
+                   fee:+f.fee.value,cat:f.cat.value}});
+  modal.style.display='none';
+};
+
+/* simple Ya-maps hint */
+ymaps3.ready.then(()=>{
+  f.addr.onblur=()=>{
+    if(!f.addr.value.trim())return;
+    ymaps3.search({text:f.addr.value,lang:'ru_RU'}).then(r=>{
+      if(r.features[0])$('route').textContent='Маршрут найден (демо)';
+    });
+  };
+});
+</script>
+</body></html>
